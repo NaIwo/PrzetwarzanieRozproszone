@@ -27,18 +27,18 @@ void check_thread_support(int provided)
     switch (provided) {
         case MPI_THREAD_SINGLE: 
             printf("Brak wsparcia dla wątków, kończę\n");
-	    fprintf(stderr, "Brak wystarczającego wsparcia dla wątków - wychodzę!\n");
-	    MPI_Finalize();
-	    exit(-1);
-	    break;
+	        fprintf(stderr, "Brak wystarczającego wsparcia dla wątków - wychodzę!\n");
+	        MPI_Finalize();
+	        exit(-1);
+	        break;
         case MPI_THREAD_FUNNELED: 
             printf("tylko te wątki, ktore wykonaly mpi_init_thread mogą wykonać wołania do biblioteki mpi\n");
-	    break;
+	        break;
         case MPI_THREAD_SERIALIZED: 
             printf("tylko jeden watek naraz może wykonać wołania do biblioteki MPI\n");
-	    break;
+	        break;
         case MPI_THREAD_MULTIPLE: printf("Pełne wsparcie dla wątków\n");
-	    break;
+	        break;
         default: printf("Nikt nic nie wie\n");
     }
 }
@@ -58,10 +58,10 @@ void makeSimpleInit(int *argc, char ***argv){
     check_thread_support(provided);
 
     const int nitems=5; 
-    int       blocklengths[5] = {1,1,1,1,1};
+    int blocklengths[5] = {1,1,1,1,1};
     MPI_Datatype typy[5] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
 
-    MPI_Aint     offsets[5]; 
+    MPI_Aint offsets[5]; 
     offsets[0] = offsetof(packet_t, id);
     offsets[1] = offsetof(packet_t, ts);
     offsets[2] = offsetof(packet_t, nr);
@@ -83,12 +83,11 @@ void makeSimpleInit(int *argc, char ***argv){
         msg[i].typ = -1;
     }
 
-    pthread_create( &threadKom, NULL, startKomWatek , 0); // Utworzenie wątku nasłuchującego
-    //debug("jestem");  
+    pthread_create( &threadKom, NULL, startKomWatek , 0); // Utworzenie wątku komunikacyjnego
 }
 void zmienStan(state_t nowy)
 {
-     pthread_mutex_lock( &stateMut );
+    pthread_mutex_lock( &stateMut );
     if (stan==Koniec) { 
 	pthread_mutex_unlock( &stateMut );
         return;
@@ -98,7 +97,7 @@ void zmienStan(state_t nowy)
 }
 void zwiekszLamporta(int value)
 {
-     pthread_mutex_lock( &lamportMut );
+    pthread_mutex_lock( &lamportMut );
     if (stan==Koniec) { 
 	pthread_mutex_unlock( &lamportMut );
         return;
@@ -115,17 +114,16 @@ int main(int argc,char **argv)
     MPI_Status status;
 
     
-//Na wstępie sprawdzam czy poprawnie zainicjowano program, czy podano odpowiednią ilość parametrów
-    if(argc != 4){ 
+    //Na wstępie sprawdzam czy poprawnie zainicjowano program, czy podano odpowiednią ilość parametrów
+    if(argc != 3){ 
         printf("Blednie zainicjowano program (Podaj odpowiendia ilosc parametrow) \n");
         return 0;
     }
 
     P = atoi( argv[1] );
     M = atoi( argv[2] );
-    N = atoi( argv[3] ); // ustawienie pożądanych wartości
  
-
+    
     pojemnoscWszystkich = malloc( sizeof (int) * N); // informacje o wielkośći wszystkich ekip
     kierunekTunelu = 0; // zainicjowanie kierunku tunalu na 0 - w stronę raju, 1 - strona ziemi
     lamportValue = 0; // ustawienie wartośći zegaru lamporta na 0
@@ -137,21 +135,25 @@ int main(int argc,char **argv)
     memset(tablicaOtrzymanychZgod, 0, sizeof(int) * N);
 
     makeSimpleInit(&argc, &argv); // inicjacja pewnych wartośći
+    
+    N = size;
 
-    packet_t *pkt = malloc( sizeof(packet_t)); // Pomocnicza
+    packet_t *pkt = malloc( sizeof(packet_t)); // Instancja struktury przesyłanej wiadomości
 
     int proba = 50; 
 
     srand( time(NULL) + rank );
-    pojemnoscWszystkich[rank] = rand() % P/2 + 1;; // ustawienie wartośći wielkośći własnej ekipy bogacza
+    pojemnoscWszystkich[rank] = rand() % P/2 + 1;; // ustawienie wartośći wielkości własnej ekipy bogacza
 
     getInfoAboutOthers(pojemnoscWszystkich[rank], pojemnoscWszystkich, N); // zebranie informacji o pojemnośći pozostałych ekip
-    //printf("%d  %d  %d \n", pojemnoscWszystkich[0], pojemnoscWszystkich[1], pojemnoscWszystkich[2]);
+
+    printf("[%d] Moja pojemność - %d\n", rank, pojemnoscWszystkich[rank]);
 
     printf("[%d]{%d} - Zaczniemy za 3 sekundy ... \n\n", rank, lamportValue);
     sleep(3);
     printf("[%d]{%d} - START! \n", rank, lamportValue);
-    while(lamportValue < 4 * N)
+
+    while(1)
     {
         int los = rand()%100;
         if((stan == naZiemi || stan == wRaju) && los >= proba) // jeśli nie ubiega się o przejście, po prostu sobie jest, więc zakładamy, że może jest chętny na przejście (to przypuszczenie implementujemy jako wartość losowa)
@@ -160,20 +162,26 @@ int main(int argc,char **argv)
             if(stan == naZiemi) printf("[%d]{%d} - Moja kolej! Chce przejsc do raju! Tunel: %d\n", rank, lamportValue, pkt->nr);
             else printf("[%d]{%d} - Moja kolej! Chce przejsc na ziemie! Tunel: %d\n", rank, lamportValue, pkt->nr);
 
-            zwiekszLamporta(-1); // ZWIĘKSZAM ZEGAR LAMPORTA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            zwiekszLamporta(-1); // Zwiększenie zegaru lamporta
             printf("[%d]{%d} - Zwiekszylem zegar lamporta na:  %d.\n", rank, lamportValue, lamportValue);
 
-            //wartość pkt->id dodawana jest w funkcji wysyłającej więc pomijam przypisanie w tym mniejscu
+            //wartość pkt->id dodawana jest w funkcji wysyłającej więc pomijam przypisanie w tym miejscu
             pkt->ts = lamportValue;
+            pkt->id = rank;
             pkt->kierunek = stan == naZiemi ? 0 : 1; // 0 - chce isc do raju, 1 - chce isc na ziemie
             pkt->typ = REQ; // REQ bo wysyłam zapytanie, żądanie do innych, o tym, że chce przejść
             msg[rank] = *pkt; // przypisuję do tablicy żądań własne żądanie
 
-            zmienStan(czekamNaPozwolenie);
-            sendPacketToAll(pkt, MSG_TAG); // ToAll oznacza, żewysyłam od razu do wszystkich bogaczy
+            if(N!=1) {
+                zmienStan(czekamNaPozwolenie);
+                sendPacketToAll(pkt, MSG_TAG); // ToAll oznacza, że wysyłam od razu do wszystkich bogaczy
+            } else {
+                zmienStan(wTunelu);
+            }
+            
         }
-        if(stan == wTunelu){
-            int ide = rand()%6 + 4;
+        if(stan == wTunelu) {
+            int ide = rand()%1 + 4;
             printf("[%d]{%d} - Jestem w tunelu i bede szedl %d sekund.\n",rank, lamportValue, ide);
 
             sleep(ide);
@@ -187,6 +195,7 @@ int main(int argc,char **argv)
 
             zmienStan(msg[rank].kierunek == 0 ? wRaju : naZiemi);
             sendPacketToAll(pkt, MSG_TAG); // ToAll oznacza, że wysyłam od razu do wszystkich bogaczy
+
             if(stan == naZiemi) printf("[%d]{%d} - Wychodze z tunelu! Jestem na ziemi. \n", rank, lamportValue);
             else if(stan == wRaju) printf("[%d]{%d} - Wychodze z tunelu! Jestem w raju. \n", rank, lamportValue);
 
@@ -208,7 +217,7 @@ int main(int argc,char **argv)
         if((stan == naZiemi || stan == wRaju) && los < proba) {
             printf("[%d]{%d} - Egzystuje sobie i nic nie chce. \n", rank, lamportValue);
         }
-        sleep(2); // zamrażam stan
+        sleep(1); // zamrożenie stanu
     }
     zmienStan(Koniec);
     END = 0;

@@ -3,7 +3,7 @@
 #include "funkcje.h"
 
 
-int topProces(int id)
+int topProces(int id) //Funkcja zwracajaca id procesu bedacego na szczycie lokalnej kolejki zadan
 {
     int min = msg[id].ts;
     int index = id;
@@ -12,12 +12,16 @@ int topProces(int id)
         if(msg[i].ts < min && msg[i].ts != -1){
             min = msg[i].ts;
             index = i;
-        } 
+        }
+        else if (msg[i].ts == min && i < index && msg[i].ts != -1) {
+            min = msg[i].ts;
+            index = i;
+        }
     }
     return index;
 }
 
-int czyWejde(int tunel) // podobna funckja, ale wcelu łatwiejszego debugowania, zmiena nazwy i lekko inne działanie
+int czyWejde(int tunel) // Funkcja ma na celu sprawdzenie czy w lokalnej kolejce zadan nie istnieje proces o wyzszym priorytecie, ktory chce przejsc w druga strone
 {
     int min = msg[rank].ts;
     int index = rank;
@@ -26,21 +30,26 @@ int czyWejde(int tunel) // podobna funckja, ale wcelu łatwiejszego debugowania,
         if(msg[i].ts < min && msg[i].kierunek == tunel && msg[i].ts != -1){
             min = msg[i].ts;
             index = i;
+        }
+        if(msg[i].ts == min && i < index && msg[i].kierunek == tunel && msg[i].ts != -1){
+            min = msg[i].ts;
+            index = i;
         } 
     }
     return index;
 }
 
-void wyczysc(int proces)
+void wyczysc(int proces) //Funkcja usuwajaca zadanie z lokalnej kolejki zadan
 {
-        udzieloneZgody[proces] = 0;
-        msg[proces].id = -1;
-        msg[proces].ts = -1;
-        msg[proces].nr = -1;
-        msg[proces].kierunek = -1;
-        msg[proces].typ = -1;
+    udzieloneZgody[proces] = 0;
+    msg[proces].id = -1;
+    msg[proces].ts = -1;
+    msg[proces].nr = -1;
+    msg[proces].kierunek = -1;
+    msg[proces].typ = -1;
 }
-int sumaOdKtorychNieOtrzymal(){
+
+int sumaOdKtorychNieOtrzymal(){ //Funkcja zwracajaca sume pojemnosci ekip, od ktorych zgody nie otrzymal
     int sum = 0;
     for (int i=0; i<N; i++)
     {
@@ -50,16 +59,20 @@ int sumaOdKtorychNieOtrzymal(){
     }
     return sum;
 }
-int zgodyPunkt5(int id)
+
+int zgodyPunkt5(int id) // Przydzielanie zgod na podstawie punktu 5 algorytmu
 {
     if(stan != wTunelu && stan != Koniec && msg[id].ts != -1)
     {
         if(stan != czekamNaPozwolenie) return 1; //Na podstawie podpunktu a)
+
         if(msg[rank].kierunek == msg[id].kierunek && msg[rank].nr != msg[id].nr) return 1; //Na podstawie podpunktu b)
+
         if(msg[rank].kierunek == msg[id].kierunek && msg[rank].nr == msg[id].nr){ //Na podstawie podpunktu c)
             if(msg[id].ts < msg[rank].ts) return 1;
             else if(msg[id].ts == msg[rank].ts && id < rank) return 1;
         }
+
         if(msg[rank].kierunek != msg[id].kierunek){ //Na podstawie podpunktu d)
             if(msg[id].ts < msg[rank].ts) return 1;
             else if(msg[id].ts == msg[rank].ts && id < rank) return 1;
@@ -68,54 +81,65 @@ int zgodyPunkt5(int id)
     }
     return 0; // w każdym innym wypadku
 }
-int zgodyPunkt6(int id)
+
+int zgodyPunkt6(int id) //Przydzielanie zgod na podstawie punktu 6 algorytmu
 {
     if(stan != wTunelu && stan != Koniec && msg[id].ts != -1)
     {
         if(stan != czekamNaPozwolenie){ //Na podstawie podpunktu a)
             if(id == topProces(id)) return 1;
         } 
+
         if(msg[rank].kierunek == msg[id].kierunek && msg[rank].nr != msg[id].nr){ //Na podstawie podpunktu b)
             if(id == topProces(id)) return 1;
         }
+
         if(msg[rank].kierunek == msg[id].kierunek && msg[rank].nr == msg[id].nr){ //Na podstawie podpunktu c)
             if(id == topProces(id)) return 1;
         }
+
         if(msg[rank].kierunek != msg[id].kierunek){ //Na podstawie podpunktu d)
             if(id == topProces(id)) return 1;
         }
     }
     return 0; // w każdym innym wypadku
 }
+
 void rozpatrzNaNowo(int what)  // Funkcja, która na nowo rozpatrzy kolejkę po zmiania która nastąpiła o wyjściu z tunelu
 {
     int czyWyslacZgode;
-    packet_t *pkt = malloc( sizeof(packet_t)); // Pomocnicza
-    for(int i=0; i<N; i++){ //Wychodze z sekcji wiec przegladam i ewentualnie wysylam zgody
-        if(msg[i].id != -1 && udzieloneZgody[i] == 0 && i != rank){
-            if(msg[i].kierunek == kierunekTunelu) // zgody na podstawie punktu 5.
-                {
-                    czyWyslacZgode = zgodyPunkt5(i);
-                }
-                else{ //Zgody na podstawie punktu 6.
-                    czyWyslacZgode = zgodyPunkt6(i);
-                }
 
-                if(czyWyslacZgode){ // jesli jest mozliwosc wyslania ACK to tego dokonuje
-                    pkt->ts = -1;
-                    pkt->nr = -1;
-                    pkt->kierunek = -1; 
-                    pkt->typ = ACK; // ACK - wysylam akceptacje do odpowiedniego procesu
-                    if(what == 0) printf("[%d]{%d} - Po zmianie kierunku wysylam pozwolenie do %d.\n", rank, lamportValue, msg[i].id);
-                    else if(what == 1) printf("[%d]{%d} - Po wyjsciu z tunelu wysylam pozwolenie do %d.\n", rank, lamportValue, msg[i].id);
-                    else printf("[%d]{%d} - Inny wyszedl z tunelu. Rozpatruje na nowo i wysylam pozwolenie do %d.\n", rank, lamportValue, msg[i].id);
-                    udzieloneZgody[i] = 1;
-                    sendPacket( pkt, i, MSG_TAG );
-                } //END small IF
-            }//END big IF
-        }// END FOR
+    packet_t *pkt = malloc( sizeof(packet_t)); // Pomocnicza
+
+    for(int i=0; i<N; i++){ //Wychodze z sekcji wiec przegladam i ewentualnie wysylam zgody
+
+        if(msg[i].id != -1 && udzieloneZgody[i] == 0 && i != rank){
+
+            czyWyslacZgode = 0;
+
+            if(msg[i].kierunek == kierunekTunelu) { // zgody na podstawie punktu 5.
+                czyWyslacZgode = zgodyPunkt5(i);
+            }
+            else{ //Zgody na podstawie punktu 6.
+                czyWyslacZgode = zgodyPunkt6(i);
+            }
+
+            if(czyWyslacZgode){ // jesli jest mozliwosc wyslania ACK to tego dokonuje
+                pkt->ts = -1;
+                pkt->nr = -1;
+                pkt->kierunek = -1; 
+                pkt->typ = ACK; // ACK - wysylam akceptacje do odpowiedniego procesu
+                if(what == 0) printf("[%d]{%d} - Po zmianie kierunku wysylam pozwolenie do %d.\n", rank, lamportValue, msg[i].id);
+                else if(what == 1) printf("[%d]{%d} - Po wyjsciu z tunelu wysylam pozwolenie do %d.\n", rank, lamportValue, msg[i].id);
+                else printf("[%d]{%d} - Inny wyszedl z tunelu. Rozpatruje na nowo i wysylam pozwolenie do %d.\n", rank, lamportValue, msg[i].id);
+                udzieloneZgody[i] = 1;
+                sendPacket( pkt, i, MSG_TAG );
+            }
+        }
+    }
     free(pkt);
 }
+
 void *startKomWatek(void *ptr)
 {
 
@@ -135,7 +159,7 @@ void *startKomWatek(void *ptr)
                 udzieloneZgody[pakiet.id] = 0;
                 msg[pakiet.id] = pakiet; // dodaje żądanie do kolejki żądań
                 if(pakiet.ts > lamportValue){
-                    zwiekszLamporta(pakiet.ts); // ZWIĘKSZAM ZEGAR LAMPORTA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    zwiekszLamporta(pakiet.ts); // zwiększenie zegaru Lamporta
                     printf("[%d]{%d} - Zwiekszylem zegar lamporta na:  %d.\n", rank, lamportValue, lamportValue);
                 }
                 
@@ -149,7 +173,7 @@ void *startKomWatek(void *ptr)
 
 
                 if(czyWyslacZgode){ // jesli jest mozliwosc wyslania ACK to tego dokonuje
-                    pkt->ts = lamportValue;
+                    pkt->ts = -1;
                     pkt->nr = -1;
                     pkt->kierunek = -1; 
                     pkt->typ = ACK; // ACK - wysylam akceptacje do odpowiedniego procesu
@@ -163,19 +187,22 @@ void *startKomWatek(void *ptr)
                 printf("[%d]{%d} - Dostalem pozwolenie od %d.\n",rank, lamportValue, pakiet.id);
                 liczbaZgod++;
                 tablicaOtrzymanychZgod[pakiet.id] = 1;
+
                 int index = czyWejde(1 - msg[rank].kierunek); // sprawdzam czy nie ma kogos kto jest wyżej w kolejce żądań i chce iść w przeciwną stronę
+
                 if(P - sumaOdKtorychNieOtrzymal() >= pojemnoscWszystkich[rank] && stan != wTunelu){ // warunek 7a
                     if(index != rank && stan == czekamNaPozwolenie && index != -1) { // warunek 7a
                             printf("[%d]{%d} - Niestety, proces %d chce isc w inna strone i posiada wyzszy piorytet.\n",rank, lamportValue, index);
-                        }
+                    }
                     else if(stan == czekamNaPozwolenie){ // warunek 7b
                         printf("[%d]{%d} - Dostalem wszystkie pozwolenia wiec wejde do tunelu.\n",rank, lamportValue);
-                        for (int i=0; i<N; i++)
-                        {
-                                tablicaOtrzymanychZgod[i] = 0;
-                        }
+
                         zmienStan(wTunelu);
                         if(msg[rank].kierunek != kierunekTunelu){ // jesli zmienil kierunek tuneli
+                            for (int i=0; i<N; i++)
+                            {
+                                udzieloneZgody[i] = 0;
+                            }
                             kierunekTunelu = 1 - kierunekTunelu;
                             pkt->ts = -1;
                             pkt->nr = -1;
@@ -202,17 +229,12 @@ void *startKomWatek(void *ptr)
 	    case REL: 
                 //trzeba usunac dany proces z kolejki bo wyszedl z tunelu
                 wyczysc(pakiet.id);
-                printf("[%d]{%d} - Proces %d wyszedl wiec usuwam z kolejki.\n",rank, lamportValue, pakiet.id);
+                printf("[%d]{%d} - Proces %d wyszedl wiec usuwam z kolejki. %d\n",rank, lamportValue, pakiet.id, czyWejde(1 - msg[rank].kierunek));
                 rozpatrzNaNowo(2); // rozpatruje kolejke na nowo i jesli to możliwe, wysyłam zgdoy
-
-
-
-                
 	    break;
 	    default:
 	    break;
         }
     }
-      free(pkt);
-    
+      free(pkt);   
 }

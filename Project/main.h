@@ -23,8 +23,8 @@ typedef enum {wTunelu, naZiemi, wRaju, czekamNaPozwolenie, Koniec} state_t;
 extern state_t stan;
 typedef struct {
     int id;         // id procesu
-    int ts;       // timestamp (zegar lamporta 
-    int nr;        // Numer tunelu ktorym chcemy przejs
+    int ts;       // timestamp (zegar lamporta) 
+    int nr;        // Numer tunelu ktorym chcemy przejsc
     int kierunek;     // Kierunek 0 - DIM, 1 - EARTH 
     int typ;      // typ wiadomosci - REQ - 1, ACK - 2, REV - 3, REL - 4
 } packet_t;
